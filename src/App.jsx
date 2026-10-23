@@ -72,6 +72,84 @@ function coutCompare(fraction, label, profil, volume) {
     : ` Indique le prix de l'eau dans ton Profil pour que je puisse comparer le coût d'une vidange à celui d'un traitement.`;
 }
 
+/* ---------------------------------------------------------------
+   CHOC — explication claire, adaptée au produit réellement utilisé
+--------------------------------------------------------------- */
+function formatMl(ml) {
+  if (ml >= 1000) return `${(Math.round(ml / 100) / 10).toString().replace(".", ",")} L`;
+  return `${ml} mL`;
+}
+
+/* niveau : "leger" (début d'algues) ou "fort" (algues installées) */
+function chocInstructions(profil, volume, niveau) {
+  const t = profil?.traitement;
+  const cible = niveau === "fort" ? 20 : 10; // mg/L de chlore libre visés pendant le choc
+  const isJavel = t === "javel9" || t === "javel12_5";
+  const pourc = t === "javel12_5" ? 12.5 : 9.6;
+  const vol = Number(volume) || 0;
+
+  const avant = "Avant le choc, vérifie ton pH : il doit être entre 7,0 et 7,2, sinon le chlore perd la majeure partie de son efficacité (corrige-le d'abord, attends 2 h).";
+  const apres = `Pendant le choc : filtration en continu 24 à 48 h, brossage des parois et du fond chaque jour, et ${filterActionLabel(profil?.typeFiltre)} quand l'eau commence à s'éclaircir (les algues mortes le colmatent). Reteste le chlore libre après 24 h : s'il est déjà retombé sous 3 mg/L alors que l'eau est encore verte, refais la même dose.`;
+
+  if (isJavel) {
+    const dose = vol ? Math.round((100 * cible * vol) / pourc) : null;
+    return `Comment faire le choc avec ta javel : la javel, c'est du chlore liquide (hypochlorite de sodium) — c'est exactement le même produit actif que le « chlore choc » vendu en magasin piscine, tu n'as rien d'autre à acheter. Un choc, c'est simplement mettre beaucoup de chlore d'un coup (environ ${cible} mg/L au lieu de 1 à 3) pour tuer les algues. ${dose ? `Pour ton bassin de ${vol} m³, verse environ ${formatMl(dose)} de javel à ${pourc.toString().replace(".", ",")} % en une seule fois.` : "Indique le volume de ton bassin dans le Profil pour que je te calcule la quantité exacte de javel."} ${avant} Verse la javel le soir (le soleil la détruit), lentement, devant les buses de refoulement, filtration en marche. Prends de la javel sans parfum ni additif, et la plus récente possible (elle perd de sa force en vieillissant, surtout au chaud). Ne la verse jamais en même temps que le pH- ou un acide : au moins 2 h d'écart. ${apres}`;
+  }
+  if (t === "galets" || t === "chlore_choc") {
+    const grams = vol ? Math.round(vol * (niveau === "fort" ? 30 : 15)) : null;
+    return `Comment faire le choc : il te faut du chlore « choc » à dissolution rapide (granulés ou pastilles choc) — les galets lents ne conviennent pas, ils se dissolvent trop doucement. ${grams ? `Pour ton bassin de ${vol} m³, compte environ ${grams} g (à ajuster selon la notice de ton produit).` : "Indique le volume de ton bassin dans le Profil pour que je te calcule la quantité."} ${avant} Dissous le produit dans un seau d'eau (le produit dans l'eau, jamais l'inverse) et verse le soir devant les refoulements. Tu peux aussi utiliser de la javel : c'est le même chlore, sous forme liquide. ${apres}`;
+  }
+  if (t === "sel") {
+    return `Comment faire le choc : ton électrolyseur produit trop peu de chlore pour rattraper des algues. Mets-le en mode « boost » si tu l'as, et ajoute en plus un choc manuel : de la javel ou du chlore choc granulés (la javel convient très bien et ne gêne pas l'électrolyse). ${avant} ${apres}`;
+  }
+  if (t === "brome") {
+    return `Comment faire le choc : avec le brome, on choque en général avec un oxydant (chlore choc non stabilisé ou oxygène actif choc) selon la notice de ton produit, pour régénérer le brome. ${avant} ${apres}`;
+  }
+  return `Comment faire le choc : avec ton traitement, suis la notice du produit « choc » associé. ${avant} ${apres}`;
+}
+
+/* ---------------------------------------------------------------
+   FIN DE SAISON / HIVERNAGE — quand on ne se baigne plus
+--------------------------------------------------------------- */
+function buildHivernageSteps(profil, m, volume) {
+  const etat = etatInfo(m.etatEau);
+  const temp = m.temp !== "" && m.temp != null ? Number(m.temp) : null;
+  const isEnterree = profil?.typeBassin === "enterre";
+  const steps = [];
+
+  if (etat.level > 0) {
+    steps.push({
+      title: "Hivernage · 1 · Rattrape l'eau une dernière fois avant de fermer",
+      color: C.amber,
+      text: `Même si tu ne te baignes plus, ne laisse pas l'eau verte tout l'hiver : les algues s'incrustent dans le liner et les joints, tachent, et au printemps tu aurais un vrai marécage à rattraper (bien plus de produit et de travail). Un seul bon traitement maintenant suffit — pas besoin d'un entretien de saison. Une fois l'eau redevenue claire, tu passes à l'hivernage ci-dessous.`,
+    });
+  }
+
+  steps.push({
+    title: "Hivernage · Faut-il continuer à traiter ?",
+    color: C.teal,
+    text: `Non, plus d'entretien « baignade ». Quand l'eau descend durablement sous 12 à 15 °C, les algues ne se développent quasiment plus : c'est le bon moment pour hiverner.${temp != null ? ` Ton eau est à ${temp} °C : ${temp <= 15 ? "tu peux hiverner dès que l'eau est claire." : "attends qu'elle descende encore un peu avant de tout couper, et garde une filtration de quelques heures par jour d'ici là."}` : ""} Deux façons de faire :
+• Hivernage actif (le plus simple dans une région aux hivers doux) : tu laisses l'eau, une bâche, et la filtration tourne environ 3 à 4 h par jour (mode hors-gel si ta pompe l'a). Un petit contrôle du chlore une fois par mois, et une dose de javel si l'eau commence à tourner.
+• Hivernage passif : après le dernier choc et une eau claire, pH vers 7,2, tu mets un produit d'hivernage (anti-algues longue durée), tu baisses le niveau sous les skimmers, tu vidanges pompe et filtre, tu mets les bouchons d'hivernage et des flotteurs, puis la bâche. Plus rien jusqu'au printemps.`,
+  });
+
+  steps.push({
+    title: "Hivernage · La vider ?",
+    color: isEnterree ? C.red : C.amber,
+    text: isEnterree
+      ? "Non, ne la vide surtout pas : une piscine enterrée vide peut se déformer, voire remonter sous la pression de la nappe et de la terre (liner qui se décolle ou se rétracte, structure abîmée). L'eau protège le bassin pendant l'hiver. On garde l'eau et on la traite au printemps."
+      : "Ce n'est pas conseillé : un liner de hors-sol vidé se rétracte au froid et risque de ne plus se remettre en place, et tu gaspillerais toute l'eau pour la racheter au printemps. On garde l'eau, on hiverne, et on la remet en route au printemps. Seule exception : un petit bassin autoportant ou tubulaire prévu pour être démonté — là, tu peux le vider, le sécher et le ranger à l'abri.",
+  });
+
+  steps.push({
+    title: "Hivernage · Et l'arroser avec ?",
+    color: C.textLo,
+    text: "Pas toute l'eau, mais tu peux utiliser celle que tu retires pour baisser le niveau (hivernage passif) : arrosage de pelouse, haies ou arbres. Attends pour ça que le chlore libre soit retombé quasiment à 0 (plusieurs jours sans aucun produit, idéalement au soleil) et jamais dans les jours qui suivent un choc ou un produit d'hivernage. Évite le potager et les plantes fragiles, et ne rejette pas d'eau chlorée dans un fossé, un ruisseau ou le réseau d'eaux pluviales.",
+  });
+
+  return steps;
+}
+
 function buildVisualStep(etatEauId, profil, volume) {
   const etat = etatInfo(etatEauId);
   const filtreAction = filterActionLabel(profil?.typeFiltre);
@@ -88,14 +166,14 @@ function buildVisualStep(etatEauId, profil, volume) {
     return {
       title: "Coup d'œil sur ton eau : légèrement verte",
       color: etat.color,
-      text: "Ta piscine tire un peu vers le vert : c'est un début d'algues, encore facile à rattraper. Fais un choc au chlore le soir, brosse bien les parois et le fond pour décoller les algues avant qu'elles ne s'accrochent — répète ce brossage chaque jour tant que la teinte n'est pas repartie —, et laisse tourner la filtration en continu pendant 24 h. Recontrôle ensuite les paramètres ci-dessous.",
+      text: "Ta piscine tire un peu vers le vert : c'est un début d'algues, encore facile à rattraper. Fais un choc au chlore le soir, brosse bien les parois et le fond pour décoller les algues avant qu'elles ne s'accrochent — répète ce brossage chaque jour tant que la teinte n'est pas repartie —, et laisse tourner la filtration en continu pendant 24 h. Recontrôle ensuite les paramètres ci-dessous.\n\n" + chocInstructions(profil, volume, "leger"),
     };
   }
   if (etat.level === 2) {
     return {
       title: "Coup d'œil sur ton eau : verte foncée",
       color: etat.color,
-      text: `Les algues sont bien installées. Fais un double choc au chlore, brosse énergiquement chaque jour — insiste sur les recoins et les marches, un simple passage ne suffira pas —, ajoute un floculant ou un clarifiant pour aider les particules à se regrouper, et ${filtreAction} plusieurs fois pendant le traitement (les algues mortes le colmatent vite). Compte 2 à 4 jours de filtration continue avant d'y voir plus clair.`,
+      text: `Les algues sont bien installées. Fais un choc renforcé (double dose), brosse énergiquement chaque jour — insiste sur les recoins et les marches, un simple passage ne suffira pas —, ajoute un floculant ou un clarifiant pour aider les particules à se regrouper, et ${filtreAction} plusieurs fois pendant le traitement (les algues mortes le colmatent vite). Compte 2 à 4 jours de filtration continue avant d'y voir plus clair.\n\n${chocInstructions(profil, volume, "fort")}`,
     };
 
   }
@@ -144,7 +222,7 @@ function dosePhMinus(produit, deltaPH, volM3) {
 }
 
 const RANGES = {
-  temp: { min: 10, max: 34, idealMin: 24, idealMax: 28, unit: "°C", label: "Température" },
+  temp: { min: 0, max: 34, idealMin: 24, idealMax: 28, unit: "°C", label: "Température", lowLabel: "Fraîche", lowColor: "#8FB6B1" },
   ph: { min: 6.4, max: 8.2, idealMin: 7.0, idealMax: 7.4, unit: "", label: "pH" },
   desinfectant: { min: 0, max: 6, idealMin: 1, idealMax: 3, unit: "mg/L", label: "Chlore libre" },
   desinfectantBrome: { min: 0, max: 8, idealMin: 3, idealMax: 5, unit: "mg/L", label: "Brome" },
@@ -182,6 +260,11 @@ const CHART_PARAMS = [
   { id: "temp", label: "Température" },
   { id: "stabilisant", label: "Stabilisant" },
   { id: "th", label: "Dureté" },
+];
+
+const USAGES = [
+  { id: "baignade", label: "Oui, on se baigne" },
+  { id: "hivernage", label: "Non, fin de saison / hiver" },
 ];
 
 const EVENEMENTS = [
@@ -286,7 +369,8 @@ function Gauge({ value, range, label, size = 132 }) {
   const pct = (clamped - range.min) / (range.max - range.min);
   const angle = -90 + pct * 180;
   const st = has ? statusOf(v, range) : "na";
-  const color = STATUS_COLOR[st];
+  const color = st === "bas" && range.lowColor ? range.lowColor : STATUS_COLOR[st];
+  const stLabel = st === "bas" && range.lowLabel ? range.lowLabel : STATUS_LABEL[st];
 
   const idealStartPct = range.idealMin != null ? (range.idealMin - range.min) / (range.max - range.min) : 0;
   const idealEndPct = range.idealMax != null ? (range.idealMax - range.min) / (range.max - range.min) : 0;
@@ -316,7 +400,7 @@ function Gauge({ value, range, label, size = 132 }) {
       <div style={{ fontFamily: FONT_BODY, fontSize: 11.5, color: C.textLo, textAlign: "center" }}>{label}</div>
       {has && (
         <div style={{ fontFamily: FONT_BODY, fontSize: 10.5, color, marginTop: 2, fontWeight: 600 }}>
-          {STATUS_LABEL[st]}
+          {stLabel}
         </div>
       )}
     </div>
@@ -533,11 +617,37 @@ function buildDiagnostic(profil, m) {
     });
   }
 
-  const filtrationH = m.temp !== "" && m.temp != null ? Math.max(4, Math.round(Number(m.temp) / 2)) : null;
+  const tempNum = m.temp !== "" && m.temp != null ? Number(m.temp) : null;
+  const hivernage = m.usage === "hivernage";
+
+  // Température basse — on l'explique au lieu de demander de la "remonter"
+  if (tempSt === "bas" && !hivernage) {
+    steps.push({
+      title: "À propos de la température",
+      color: C.textLo,
+      text: tempNum != null && tempNum < 16
+        ? `Ton eau à ${tempNum} °C est simplement froide : c'est normal en cette saison, et ce n'est pas un réglage chimique à corriger. Une eau froide freine même les algues. Seuls un chauffage (pompe à chaleur) ou une bâche/un abri pourraient la réchauffer. Si tu ne te baignes plus, indique-le ci-dessus (« Je ne m'en sers plus ») pour avoir les conseils de fin de saison et d'hivernage.`
+        : "Ton eau est un peu fraîche pour la baignade (24 à 28 °C, c'est le confort habituel), mais ce n'est pas un problème de qualité d'eau et aucun produit ne la réchauffe. Si tu veux gagner quelques degrés : bâche à bulles la nuit, abri, ou pompe à chaleur.",
+    });
+  }
+
+  if (hivernage) {
+    // En fin de saison : on garde seulement ce qui sert au dernier choc (TAC, pH, chloramines)
+    const utiles = etatInfo(m.etatEau).level > 0
+      ? steps.filter((s) => /^[123] ·/.test(s.title))
+      : [];
+    const hiv = buildHivernageSteps(profil, m, volume);
+    const [rattrapage, ...reste] = etatInfo(m.etatEau).level > 0 ? hiv : [null, ...hiv];
+    const ordered = [rattrapage, ...utiles, ...reste].filter(Boolean);
+    const filtrationHiv = tempNum != null ? (tempNum > 15 ? Math.max(4, Math.round(tempNum / 2)) : 3) : null;
+    return { visualStep, eventStep, steps: ordered, allOk: false, filtrationH: etatInfo(m.etatEau).level > 0 ? null : filtrationHiv, hivernage: true };
+  }
+
+  const filtrationH = tempNum != null ? Math.max(4, Math.round(tempNum / 2)) : null;
 
   const allOk = [tacSt, phSt, desSt, stabSt, thSt].every((s) => s === "ok" || s === "na") && (combine == null || combine <= 0.5) && (etatInfo(m.etatEau).level === 0);
 
-  return { visualStep, eventStep, steps, allOk, filtrationH };
+  return { visualStep, eventStep, steps, allOk, filtrationH, hivernage: false };
 }
 
 /* ---------------------------------------------------------------
@@ -586,7 +696,7 @@ export default function PiscinePro() {
   const [profil, setProfil] = useState({ nom: "Ma piscine", volume: "", traitement: "galets", produitPhMinus: "poudre", produitPhPlus: "carbonate", prixEau: "", typeBassin: "enterre", structure: "liner", typeFiltre: "sable" });
   const [mesures, setMesures] = useState([]);
   const [draft, setDraft] = useState({
-    etatEau: "claire", evenement: "aucun", temp: "", ph: "", desinfectant: "", chloreTotal: "", tac: "", stabilisant: "", th: "", sel: "", orp: "", tds: "", phosphates: "", fer: "", cuivre: "", turbidite: "",
+    etatEau: "claire", evenement: "aucun", usage: "baignade", temp: "", ph: "", desinfectant: "", chloreTotal: "", tac: "", stabilisant: "", th: "", sel: "", orp: "", tds: "", phosphates: "", fer: "", cuivre: "", turbidite: "",
   });
   const [expanded, setExpanded] = useState(null);
   const [carnetView, setCarnetView] = useState("liste");
@@ -600,6 +710,7 @@ export default function PiscinePro() {
       if (pr) setPrenom(pr);
       if (p) setProfil(p);
       setMesures(m);
+      if (m[0]?.usage) setDraft((d) => ({ ...d, usage: m[0].usage }));
       setReady(true);
       if (!p || p.volume === "") setTab("profil"); else setTab(m.length ? "diagnostic" : "mesure");
     })();
@@ -630,8 +741,16 @@ export default function PiscinePro() {
     const next = [entry, ...mesures];
     setMesures(next);
     await saveMesures(next);
-    setDraft({ etatEau: "claire", evenement: "aucun", temp: "", ph: "", desinfectant: "", chloreTotal: "", tac: "", stabilisant: "", th: "", sel: "", orp: "", tds: "", phosphates: "", fer: "", cuivre: "", turbidite: "" });
+    setDraft({ etatEau: "claire", evenement: "aucun", usage: entry.usage || "baignade", temp: "", ph: "", desinfectant: "", chloreTotal: "", tac: "", stabilisant: "", th: "", sel: "", orp: "", tds: "", phosphates: "", fer: "", cuivre: "", turbidite: "" });
     setTab("diagnostic");
+  }
+
+  async function handleSetUsage(usage) {
+    if (!dernier) return;
+    const next = mesures.map((m, i) => (i === 0 ? { ...m, usage } : m));
+    setMesures(next);
+    setDraft((d) => ({ ...d, usage }));
+    await saveMesures(next);
   }
 
   async function handleDelete(id) {
@@ -814,6 +933,20 @@ export default function PiscinePro() {
                   })}
                 </div>
               </div>
+              <div className="flex flex-col gap-1.5">
+                <span style={{ fontFamily: FONT_BODY, fontSize: 12.5, color: C.textLo }}>Tu utilises encore la piscine ?</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {USAGES.map((u) => {
+                    const active = draft.usage === u.id;
+                    return (
+                      <button key={u.id} onClick={() => setDraft({ ...draft, usage: u.id })}
+                        style={{ padding: "9px 10px", borderRadius: 10, background: active ? C.tealSoft : C.surface, border: `1px solid ${active ? C.teal : C.border}`, fontSize: 12.5, color: active ? C.textHi : C.textLo }}>
+                        {u.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="flex flex-col gap-1">
                 <span style={{ fontFamily: FONT_BODY, fontSize: 12.5, color: C.textLo }}>Un évènement récent ?</span>
                 <select value={draft.evenement} onChange={(e) => setDraft({ ...draft, evenement: e.target.value })}
@@ -867,13 +1000,27 @@ export default function PiscinePro() {
                   <TitleRow>
                     Dernière mesure · {new Date(dernier.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </TitleRow>
+                  <div className="flex flex-col gap-1.5">
+                    <span style={{ fontSize: 12, color: C.textLo }}>Tu utilises encore la piscine ?</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {USAGES.map((u) => {
+                        const active = (dernier.usage || "baignade") === u.id;
+                        return (
+                          <button key={u.id} onClick={() => handleSetUsage(u.id)}
+                            style={{ padding: "8px 10px", borderRadius: 10, background: active ? C.tealSoft : C.surface, border: `1px solid ${active ? C.teal : C.border}`, fontSize: 12, color: active ? C.textHi : C.textLo }}>
+                            {u.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   {diag?.visualStep && (
                     <div style={{ background: C.surface, borderLeft: `3px solid ${diag.visualStep.color}`, borderRadius: 10, padding: 12 }}>
                       <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
                         <span style={{ width: 10, height: 10, borderRadius: 5, background: diag.visualStep.color, flexShrink: 0 }} />
                         <span style={{ fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 600, color: C.textHi }}>{diag.visualStep.title}</span>
                       </div>
-                      <div style={{ fontSize: 12.5, color: C.textLo, lineHeight: 1.55 }}>{diag.visualStep.text}</div>
+                      <div style={{ fontSize: 12.5, color: C.textLo, lineHeight: 1.55, whiteSpace: "pre-line" }}>{diag.visualStep.text}</div>
                     </div>
                   )}
                   {diag?.eventStep && (
@@ -882,7 +1029,7 @@ export default function PiscinePro() {
                         <AlertTriangle size={14} color={diag.eventStep.color} />
                         <span style={{ fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 600, color: C.textHi }}>{diag.eventStep.title}</span>
                       </div>
-                      <div style={{ fontSize: 12.5, color: C.textLo, lineHeight: 1.55 }}>{diag.eventStep.text}</div>
+                      <div style={{ fontSize: 12.5, color: C.textLo, lineHeight: 1.55, whiteSpace: "pre-line" }}>{diag.eventStep.text}</div>
                     </div>
                   )}
                   <div className="grid grid-cols-3 gap-2" style={{ background: C.surface, borderRadius: 16, padding: 14 }}>
@@ -907,7 +1054,11 @@ export default function PiscinePro() {
                     <div className="flex items-center gap-2" style={{ background: C.surface, borderRadius: 12, padding: 12 }}>
                       <Timer size={16} color={C.teal} style={{ flexShrink: 0 }} />
                       <span style={{ fontSize: 12.5, color: C.textLo, lineHeight: 1.5 }}>
-                        Avec ton eau à {dernier.temp} °C, vise environ <strong style={{ color: C.textHi }}>{diag.filtrationH} h</strong> de filtration aujourd'hui (règle température ÷ 2) — idéalement réparties sur les heures les plus chaudes, entre 10 h et 20 h, quand les UV dégradent le plus le chlore.
+                        {diag.hivernage ? (
+                          <>Avec ton eau à {dernier.temp} °C, en hivernage actif, environ <strong style={{ color: C.textHi }}>{diag.filtrationH} h</strong> de filtration par jour suffisent{Number(dernier.temp) > 15 ? " tant que l'eau n'est pas descendue sous 15 °C" : ""} — en mode hors-gel s'il gèle. En hivernage passif, la filtration est arrêtée et vidangée.</>
+                        ) : (
+                          <>Avec ton eau à {dernier.temp} °C, vise environ <strong style={{ color: C.textHi }}>{diag.filtrationH} h</strong> de filtration aujourd'hui (règle température ÷ 2) — idéalement réparties sur les heures les plus chaudes, entre 10 h et 20 h, quand les UV dégradent le plus le chlore.</>
+                        )}
                       </span>
                     </div>
                   )}
@@ -920,7 +1071,7 @@ export default function PiscinePro() {
                   ) : (
                     <div className="flex flex-col gap-3">
                       <div style={{ fontSize: 13.5, color: C.textHi, lineHeight: 1.5 }}>
-                        Salut {prenom}, voici comment on remet ton eau au top, dans l'ordre :
+                        {diag.hivernage ? `${prenom}, tu ne te baignes plus : voici quoi faire pour passer l'hiver tranquille, dans l'ordre :` : `Salut ${prenom}, voici comment on remet ton eau au top, dans l'ordre :`}
                       </div>
                       {diag.steps.map((s, i) => (
                         <div key={i} style={{ background: C.surface, borderLeft: `3px solid ${s.color}`, borderRadius: 10, padding: 12 }}>
@@ -928,7 +1079,7 @@ export default function PiscinePro() {
                             {s.color === C.red && <AlertTriangle size={14} color={s.color} />}
                             <span style={{ fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 600, color: C.textHi }}>{s.title}</span>
                           </div>
-                          <div style={{ fontSize: 12.5, color: C.textLo, lineHeight: 1.55 }}>{s.text}</div>
+                          <div style={{ fontSize: 12.5, color: C.textLo, lineHeight: 1.55, whiteSpace: "pre-line" }}>{s.text}</div>
                         </div>
                       ))}
                       <div style={{ fontSize: 11, color: C.textLo, fontStyle: "italic", marginTop: 2 }}>
